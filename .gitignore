@@ -1,0 +1,7 @@
+build
+.ccls*
+.kakrc*
+*.o
+*.so
+*.bin
+
