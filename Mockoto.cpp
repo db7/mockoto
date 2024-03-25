@@ -59,7 +59,7 @@ static std::string createIncludeSource(Config &config,
 
 int main(int argc, const char **argv) {
   auto OptionsParser =
-      CommonOptionsParser::create(argc, argv, optionCategory, cl::OneOrMore);
+      CommonOptionsParser::create(argc, argv, optionCategory, cl::ZeroOrMore);
 
   // prepare exclude patterns
   std::list<std::string> ep;
