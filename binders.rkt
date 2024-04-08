@@ -45,8 +45,8 @@
   ;; the user can define here one library
   (define mockoto-lib '())
 
-  (define (load-lib path)
-    (set! mockoto-lib (ffi-lib path)))
+  (define (load-lib path #:custodian [custodian #f])
+    (set! mockoto-lib (ffi-lib path #:custodian custodian)))
 
   (define-syntax-rule (mock fun-sym mock-fun)
     ;; ensure mockotolib set
