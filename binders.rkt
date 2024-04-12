@@ -27,11 +27,13 @@
     (let ([strs (map (lambda (s) (if (symbol? s) (symbol->string s) s)) args)])
       (string->symbol (apply string-append strs))))
 
-  (define-syntax-rule (mockoto-hook clib fun-sym mock-fun)
-    (let* ([fun-type (add-prefix "_" fun-sym)]
-           [hook-type (_fun fun-type -> _void)]
-           [hook-sym (combine-sym "mockoto_" 'fun-sym "_hook")]
+  (define mock-funs (mutable-set))
+
+  (define (mockoto-hook clib fun-sym fun-type mock-fun)
+    (let* ([hook-type (_fun fun-type -> _void)]
+           [hook-sym (combine-sym "mockoto_" fun-sym "_hook")]
            [hook-fun (get-ffi-obj hook-sym clib hook-type)])
+      (set-add! mock-funs mock-fun)
       (hook-fun mock-fun)))
 
   (define-syntax-rule (get-ffi clib fun-sym)
@@ -50,7 +52,7 @@
 
   (define-syntax-rule (mock fun-sym mock-fun)
     ;; ensure mockotolib set
-    (mockoto-hook mockoto-lib fun-sym mock-fun))
+    (mockoto-hook mockoto-lib 'fun-sym (add-prefix "_" fun-sym) mock-fun))
 
   (define-syntax-rule (call fun-sym args ...)
     ;; ensure mockotolib set
