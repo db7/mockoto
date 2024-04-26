@@ -45,7 +45,8 @@ static cl::extrahelp
 
 static std::string createIncludeSource(Config &config,
                                        std::vector<std::string> &files) {
-  std::string fname = "/tmp/mockoto.c";
+  char templ[] = "mockotoXXXXXX";
+  std::string fname = std::string(mkdtemp(templ)) + ".c";
   std::ofstream out(fname);
 
   for (auto ifile : files) {
