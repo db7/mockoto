@@ -1,0 +1,75 @@
+.TH MOCKOTO 1 "February 2026" "mockoto 0.1" "User Commands"
+.SH NAME
+mockoto \- generate C mocks and language bindings from C headers
+.SH SYNOPSIS
+.B mockoto
+[\fIOPTIONS\fR] \fIheader.h\fR [\fIheader2.h\fR ...] [\fB--\fR \fIclang-options\fR ...]
+.SH DESCRIPTION
+.B mockoto
+parses one or more C header files and generates output according to the selected mode.
+
+Input headers are compiled by libclang, so include paths and preprocessor definitions
+should be passed after
+.B -- .
+.SH OPTIONS
+.TP
+.BI --mode " c|h|rkt|chibi"
+Select output mode.
+
+\fBc\fR (default): generate mock implementation C code.
+
+\fBh\fR: generate mock header declarations.
+
+\fBrkt\fR: generate Racket bindings.
+
+\fBchibi\fR: generate Chibi Scheme FFI stubs.
+.TP
+.B --print-src
+Print source path comments in generated output.
+.TP
+.BI --path-exclude " pattern"
+Exclude declarations from files whose path contains
+.IR pattern .
+Can be provided multiple times.
+.TP
+.BI --path-include " include-path"
+Add an include path hint to generated bindings.
+Can be provided multiple times.
+.TP
+.B -help
+Show command help from LLVM command line parser.
+.SH EXAMPLES
+.TP
+Generate mock C implementation:
+.IP
+.EX
+mockoto --mode c server.h -- -I.
+.EE
+.TP
+Generate mock header:
+.IP
+.EX
+mockoto --mode h server.h -- -I.
+.EE
+.TP
+Generate Racket bindings:
+.IP
+.EX
+mockoto --mode rkt client.h server.h -- -I.
+.EE
+.TP
+Generate Chibi stub:
+.IP
+.EX
+mockoto --mode chibi client.h server.h -- -I.
+.EE
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B non-zero
+Failure while parsing arguments, running clang tooling, or generating output.
+.SH SEE ALSO
+.BR clang (1),
+.BR cmake (1)
