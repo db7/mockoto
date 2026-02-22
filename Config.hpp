@@ -12,6 +12,7 @@ public:
     MOCK_C,
     MOCK_H,
     BIND_RKT,
+    BIND_CHIBI,
   } mode;
 
   Config(std::list<std::string> excludePatterns, Mode mode)

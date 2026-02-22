@@ -3,6 +3,9 @@
 #include "llvm/Support/CommandLine.h"
 
 #include <cstdio>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -12,6 +15,7 @@
 
 #include "ActionFactory.hpp"
 #include "Bindgen.hpp"
+#include "Chibigen.hpp"
 #include "Config.hpp"
 #include "Mockgen.hpp"
 
@@ -23,7 +27,7 @@ using namespace mockoto;
 static cl::OptionCategory optionCategory("Mockoto Options");
 
 static cl::opt<std::string> modeOpt("mode",
-                                    cl::desc("Select output mode (c|h|rkt)"),
+                                    cl::desc("Select output mode (c|h|rkt|chibi)"),
                                     cl::cat(optionCategory));
 
 static cl::opt<bool>
@@ -59,7 +63,11 @@ static std::string createIncludeSource(Config &config,
   }
 
   for (auto ifile : files) {
-    out << "#include \"" << ifile << "\"\n";
+    fs::path includePath(ifile);
+    std::string resolvedInclude = includePath.is_absolute()
+                                      ? includePath.lexically_normal().string()
+                                      : fs::absolute(includePath).lexically_normal().string();
+    out << "#include \"" << resolvedInclude << "\"\n";
     config.includeFiles.push_back(ifile);
   }
   out.close();
@@ -85,6 +93,8 @@ int main(int argc, const char **argv) {
     mode = Config::Mode::MOCK_H;
   } else if (modeVal == "rkt") {
     mode = Config::Mode::BIND_RKT;
+  } else if (modeVal == "chibi") {
+    mode = Config::Mode::BIND_CHIBI;
   } else {
     llvm::outs() << "Unknown mode '" << modeVal << "'\n";
     return 1;
@@ -106,6 +116,8 @@ int main(int argc, const char **argv) {
   int r = 0;
   if (mode == Config::Mode::BIND_RKT) {
     r = Tool.run(newActionFactory<BindgenVisitor>(config).get());
+  } else if (mode == Config::Mode::BIND_CHIBI) {
+    r = Tool.run(newActionFactory<ChibigenVisitor>(config).get());
   } else {
     r = Tool.run(newActionFactory<MockgenVisitor>(config).get());
   }

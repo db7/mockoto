@@ -16,3 +16,6 @@ Run racket tests:
 
 	raco test example_test.rkt
 
+Run chibi fixture test:
+
+	make chibi-test

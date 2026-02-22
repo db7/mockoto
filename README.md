@@ -31,6 +31,7 @@ You should now have the executable `build/mockoto`, which can be installed in yo
     mockoto --mode C header.h another.h > mock_code.c
     mockoto --mode H header.h another.h > mock_code.h
     mockoto --mode rkt header.h another.h > bindings.rkt
+    mockoto --mode chibi header.h another.h > bindings.stub
 
 Your test case can be compiled with `mock_code.c`.
 If you want to adapt the mock code from C, you can include `mock_code.h` and use the respective functions.
@@ -69,8 +70,11 @@ With `bindings.rkt` you have access to the mock from Racket. Here is the `foo` e
 
 See [example](example) for a running example.
 
+For `--mode chibi`, the generated `.stub` can be compiled with `chibi-ffi`:
+
+    chibi-ffi -c bindings.stub
+
 ## Mockoto Limitations
 
 - no support for varargs
 - assumes enums and structs have unique names
-

@@ -1,10 +1,13 @@
-MOCKOTO=../build/mockoto
+MOCKOTO?=../build/mockoto
 CC=clang
 CFLAGS=-Wall -Werror
 
 build: example_test.bin
 
 racket: example.rkt libexample.so
+
+chibi-test:
+	MOCKOTO="$(MOCKOTO)" ./chibi_test.sh
 
 %_mock.c: %.h
 	$(MOCKOTO) --mode c $< -- -I. > $@
@@ -25,7 +28,7 @@ libexample.so: client.o server_mock.o
 	$(CC) $(CFLAGS) -shared -o $@ $^
 
 clean:
-	rm -rf *.o *.so *.bin *_mock.* example.rkt
+	rm -rf *.o *.so *.bin *_mock.* example.rkt example.stub
 
-.PHONY: build clean racket
+.PHONY: build clean racket chibi-test
 .SECONDARY: server_mock.c server_mock.h
