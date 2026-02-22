@@ -9,6 +9,11 @@ project(
     VERSION 0.1)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 ################################################################################
 # clang configuration
@@ -64,7 +69,5 @@ target_link_libraries(mockoto PRIVATE ${LINK_LIBRARIES})
 # installation
 ################################################################################
 
-install(
-    FILES ${CMAKE_CURRENT_BINARY_DIR}/mockoto
-    PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
-    DESTINATION bin)
+install(TARGETS mockoto
+        RUNTIME DESTINATION bin)

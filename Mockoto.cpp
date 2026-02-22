@@ -45,9 +45,18 @@ static cl::extrahelp
 
 static std::string createIncludeSource(Config &config,
                                        std::vector<std::string> &files) {
-  char templ[] = "mockotoXXXXXX";
-  std::string fname = std::string(mkdtemp(templ)) + ".c";
+  namespace fs = std::filesystem;
+  auto base = std::to_string(std::chrono::steady_clock::now()
+                                 .time_since_epoch()
+                                 .count());
+  std::string fname =
+      (fs::temp_directory_path() / ("mockoto-" + base + ".c")).string();
   std::ofstream out(fname);
+  if (!out.is_open()) {
+    llvm::outs() << "Failed to open temporary include source: " << fname
+                 << "\n";
+    std::exit(1);
+  }
 
   for (auto ifile : files) {
     out << "#include \"" << ifile << "\"\n";
