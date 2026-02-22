@@ -68,6 +68,43 @@ target_include_directories(mockoto PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(mockoto PRIVATE ${LINK_LIBRARIES})
 
 ################################################################################
+# tests
+################################################################################
+
+enable_testing()
+
+set(MOCKOTO_TEST_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_case.sh")
+
+function(add_mockoto_test CASE_NAME)
+  add_test(
+      NAME ${CASE_NAME}
+      COMMAND sh "${MOCKOTO_TEST_SCRIPT}" "${CASE_NAME}" "$<TARGET_FILE:mockoto>"
+              "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
+endfunction()
+
+add_mockoto_test(c_mode_generates_helpers)
+add_mockoto_test(c_mode_void_has_no_returns_helper)
+add_mockoto_test(c_mode_pointer_return_has_returns_helper)
+add_mockoto_test(c_mode_function_pointer_param_signature)
+add_mockoto_test(h_mode_generates_header_api)
+add_mockoto_test(default_mode_is_c)
+add_mockoto_test(print_src_reports_locations)
+add_mockoto_test(path_exclude_filters_decls)
+add_mockoto_test(static_and_extern_are_ignored)
+add_mockoto_test(multi_header_generates_all_funcs)
+add_mockoto_test(rkt_mode_generates_bindings)
+add_mockoto_test(chibi_mode_generates_stub)
+add_mockoto_test(unknown_mode_fails)
+add_mockoto_test(compile_and_run_generated_mock)
+add_mockoto_test(optional_chibi_generation_runtime)
+add_mockoto_test(optional_racket_generation_runtime)
+
+set_tests_properties(optional_chibi_generation_runtime
+                     PROPERTIES SKIP_RETURN_CODE 77)
+set_tests_properties(optional_racket_generation_runtime
+                     PROPERTIES SKIP_RETURN_CODE 77)
+
+################################################################################
 # installation
 ################################################################################
 

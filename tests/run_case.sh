@@ -1,0 +1,264 @@
+#!/bin/sh
+
+set -eu
+
+if [ "$#" -ne 4 ]; then
+  echo "usage: $0 <case-name> <mockoto-bin> <source-dir> <build-dir>" >&2
+  exit 2
+fi
+
+CASE_NAME="$1"
+MOCKOTO="$2"
+SRC_DIR="$3"
+BUILD_DIR="$4"
+CC_BIN="${CC:-cc}"
+
+TMP_BASE="${TMPDIR:-/tmp}"
+WORK_DIR="$(mktemp -d "${TMP_BASE%/}/mockoto-test.XXXXXX")"
+cleanup() {
+  rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT INT TERM
+
+assert_contains() {
+  needle="$1"
+  file="$2"
+  if ! grep -F -- "$needle" "$file" >/dev/null; then
+    echo "assertion failed: expected to find [$needle] in $file" >&2
+    sed -n '1,220p' "$file" >&2 || true
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  needle="$1"
+  file="$2"
+  if grep -F -- "$needle" "$file" >/dev/null; then
+    echo "assertion failed: expected to not find [$needle] in $file" >&2
+    sed -n '1,220p' "$file" >&2 || true
+    exit 1
+  fi
+}
+
+assert_regex() {
+  pattern="$1"
+  file="$2"
+  if ! grep -E -- "$pattern" "$file" >/dev/null; then
+    echo "assertion failed: expected regex [$pattern] in $file" >&2
+    sed -n '1,220p' "$file" >&2 || true
+    exit 1
+  fi
+}
+
+run_mockoto() {
+  out_file="$1"
+  shift
+  "$MOCKOTO" "$@" >"$out_file"
+}
+
+cd "$SRC_DIR"
+
+case "$CASE_NAME" in
+  c_mode_generates_helpers)
+    out="$WORK_DIR/c_mode.c"
+    run_mockoto "$out" --mode c tests/fixtures/basic.h -- -Itests/fixtures
+    assert_contains "#include \"tests/fixtures/basic.h\"" "$out"
+    assert_contains "typedef int (*mockoto_add_f) (int, int);" "$out"
+    assert_contains "void mockoto_add_hook(mockoto_add_f cb)" "$out"
+    assert_contains "void mockoto_add_returns(int ret)" "$out"
+    assert_contains "int mockoto_add_called(void)" "$out"
+    assert_contains "add(int __param_0, int __param_1)" "$out"
+    ;;
+
+  c_mode_void_has_no_returns_helper)
+    out="$WORK_DIR/c_mode_void.c"
+    run_mockoto "$out" --mode c tests/fixtures/basic.h -- -Itests/fixtures
+    assert_contains "ping(void)" "$out"
+    assert_contains "void mockoto_ping_hook(mockoto_ping_f cb)" "$out"
+    assert_not_contains "mockoto_ping_returns" "$out"
+    ;;
+
+  c_mode_pointer_return_has_returns_helper)
+    out="$WORK_DIR/c_mode_pointer_return.c"
+    run_mockoto "$out" --mode c tests/fixtures/basic.h -- -Itests/fixtures
+    assert_regex "void mockoto_fetch_name_returns\\(char \\* ret\\)" "$out"
+    ;;
+
+  c_mode_function_pointer_param_signature)
+    out="$WORK_DIR/c_mode_fnptr.c"
+    run_mockoto "$out" --mode c tests/fixtures/basic.h -- -Itests/fixtures
+    assert_regex "apply_cb\\(int\\(\\*__param_0\\)\\(int\\), int __param_1\\)" "$out"
+    ;;
+
+  h_mode_generates_header_api)
+    out="$WORK_DIR/h_mode.h"
+    run_mockoto "$out" --mode h tests/fixtures/basic.h -- -Itests/fixtures
+    assert_contains "#ifndef MOCKOTO__H" "$out"
+    assert_contains "#define MOCKOTO__H" "$out"
+    assert_contains "void mockoto_add_hook(mockoto_add_f cb);" "$out"
+    assert_contains "int mockoto_add_called(void);" "$out"
+    assert_contains "#endif" "$out"
+    assert_not_contains "weak_mock" "$out"
+    assert_not_contains "_add_hook = cb;" "$out"
+    ;;
+
+  default_mode_is_c)
+    out="$WORK_DIR/default_mode.c"
+    run_mockoto "$out" tests/fixtures/basic.h -- -Itests/fixtures
+    assert_contains "#define weak_mock __attribute__((weak))" "$out"
+    assert_contains "add(int __param_0, int __param_1)" "$out"
+    ;;
+
+  print_src_reports_locations)
+    out="$WORK_DIR/print_src.c"
+    run_mockoto "$out" --mode c --print-src tests/fixtures/basic.h -- -Itests/fixtures
+    assert_contains "// location: " "$out"
+    assert_regex "basic\\.h:[0-9]+" "$out"
+    ;;
+
+  path_exclude_filters_decls)
+    out="$WORK_DIR/path_exclude.c"
+    run_mockoto "$out" --mode c --path-exclude extra.h tests/fixtures/basic.h tests/fixtures/extra.h -- -Itests/fixtures
+    assert_contains "// function: add" "$out"
+    assert_not_contains "// function: multiply" "$out"
+    ;;
+
+  static_and_extern_are_ignored)
+    out="$WORK_DIR/static_extern.c"
+    run_mockoto "$out" --mode c tests/fixtures/extra.h -- -Itests/fixtures
+    assert_contains "// function: multiply" "$out"
+    assert_not_contains "hidden_fn" "$out"
+    assert_not_contains "external_only" "$out"
+    ;;
+
+  multi_header_generates_all_funcs)
+    out="$WORK_DIR/multi_header.c"
+    run_mockoto "$out" --mode c tests/fixtures/basic.h tests/fixtures/extra.h -- -Itests/fixtures
+    assert_contains "#include \"tests/fixtures/basic.h\"" "$out"
+    assert_contains "#include \"tests/fixtures/extra.h\"" "$out"
+    assert_contains "// function: add" "$out"
+    assert_contains "// function: multiply" "$out"
+    ;;
+
+  rkt_mode_generates_bindings)
+    out="$WORK_DIR/bindings.rkt"
+    run_mockoto "$out" --mode rkt tests/fixtures/basic.h tests/fixtures/extra.h -- -Itests/fixtures
+    assert_contains "#lang racket" "$out"
+    assert_contains "(define _add" "$out"
+    assert_contains "(define _fetch_name" "$out"
+    assert_contains "(define _apply_cb" "$out"
+    assert_contains "(define _multiply" "$out"
+    ;;
+
+  chibi_mode_generates_stub)
+    out="$WORK_DIR/bindings.stub"
+    run_mockoto "$out" --mode chibi tests/fixtures/basic.h tests/fixtures/extra.h -- -Itests/fixtures
+    assert_contains "(c-include \"tests/fixtures/basic.h\")" "$out"
+    assert_contains "(c-include \"tests/fixtures/extra.h\")" "$out"
+    assert_contains "(define-c int add (int int))" "$out"
+    assert_contains "(define-c void ping (void))" "$out"
+    assert_contains "(define-c int multiply (int int))" "$out"
+    ;;
+
+  unknown_mode_fails)
+    out="$WORK_DIR/unknown_mode.log"
+    if "$MOCKOTO" --mode nope tests/fixtures/basic.h -- -Itests/fixtures >"$out" 2>&1; then
+      echo "assertion failed: unknown mode should fail" >&2
+      sed -n '1,120p' "$out" >&2 || true
+      exit 1
+    fi
+    assert_contains "Unknown mode 'nope'" "$out"
+    ;;
+
+  compile_and_run_generated_mock)
+    mock_c="$WORK_DIR/basic_mock.c"
+    mock_h="$WORK_DIR/basic_mock.h"
+    main_c="$WORK_DIR/main.c"
+    bin="$WORK_DIR/mock_test.bin"
+
+    run_mockoto "$mock_c" --mode c tests/fixtures/basic.h -- -Itests/fixtures
+    run_mockoto "$mock_h" --mode h tests/fixtures/basic.h -- -Itests/fixtures
+
+    cat >"$main_c" <<'EOF'
+#include <assert.h>
+#include <string.h>
+
+#include "basic_mock.h"
+
+static int plus_one(int x) { return x + 1; }
+
+static int apply_hook(int (*cb)(int), int value) { return cb(value) * 2; }
+
+int main(void) {
+  assert(add(1, 2) == 0);
+  assert(mockoto_add_called() == 1);
+  assert(mockoto_add_called() == 0);
+
+  mockoto_add_returns(7);
+  assert(add(4, 5) == 7);
+  assert(mockoto_add_called() == 1);
+
+  ping();
+  ping();
+  assert(mockoto_ping_called() == 2);
+  assert(mockoto_ping_called() == 0);
+
+  mockoto_fetch_name_returns((char *)"ok");
+  assert(strcmp(fetch_name(12), "ok") == 0);
+
+  mockoto_apply_cb_returns(9);
+  assert(apply_cb(plus_one, 10) == 9);
+
+  mockoto_apply_cb_hook(apply_hook);
+  assert(apply_cb(plus_one, 4) == 10);
+  mockoto_apply_cb_hook(0);
+
+  return 0;
+}
+EOF
+
+    "$CC_BIN" -std=c99 -Wall -Werror -I"$SRC_DIR" -I"$WORK_DIR" \
+      "$mock_c" "$main_c" -o "$bin"
+    "$bin"
+    ;;
+
+  optional_chibi_generation_runtime)
+    if ! command -v chibi-ffi >/dev/null 2>&1; then
+      echo "SKIP: chibi-ffi not installed"
+      exit 77
+    fi
+    out="$WORK_DIR/chibi.stub"
+    log="$WORK_DIR/chibi.log"
+    run_mockoto "$out" --mode chibi \
+      "$SRC_DIR/tests/fixtures/basic.h" "$SRC_DIR/tests/fixtures/extra.h" \
+      -- -I"$SRC_DIR/tests/fixtures"
+    if ! (
+      cd "$WORK_DIR"
+      chibi-ffi -c "$out" >"$log" 2>&1
+    ); then
+      if grep -F "chibi/eval.h" "$log" >/dev/null; then
+        echo "SKIP: chibi development headers not installed"
+        exit 77
+      fi
+      cat "$log" >&2
+      exit 1
+    fi
+    ;;
+
+  optional_racket_generation_runtime)
+    if ! command -v racket >/dev/null 2>&1; then
+      echo "SKIP: racket not installed"
+      exit 77
+    fi
+    out="$WORK_DIR/bindings.rkt"
+    run_mockoto "$out" --mode rkt tests/fixtures/basic.h tests/fixtures/extra.h -- -Itests/fixtures
+    racket "$out" >/dev/null
+    ;;
+
+  *)
+    echo "unknown test case: $CASE_NAME" >&2
+    exit 2
+    ;;
+esac
+
+echo "PASS: $CASE_NAME"
