@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            clang \
+            llvm-dev \
+            libclang-dev \
+            vim-common
+
+          # Optional test runtimes. Tests are skipped if tools are unavailable.
+          if apt-cache show racket >/dev/null 2>&1; then
+            sudo apt-get install -y racket
+          fi
+          if apt-cache show chibi-scheme >/dev/null 2>&1; then
+            sudo apt-get install -y chibi-scheme
+          fi
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          LLVM_DIR="$(llvm-config --cmakedir)"
+          CLANG_DIR="$(dirname "${LLVM_DIR}")/clang"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="${LLVM_DIR}" \
+            -DClang_DIR="${CLANG_DIR}"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  runtime-generators:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            clang \
+            llvm-dev \
+            libclang-dev \
+            vim-common \
+            racket
+
+          # Install chibi runtime and headers if available.
+          if apt-cache show chibi-scheme >/dev/null 2>&1; then
+            sudo apt-get install -y chibi-scheme
+          fi
+          if apt-cache show chibi-scheme-dev >/dev/null 2>&1; then
+            sudo apt-get install -y chibi-scheme-dev
+          fi
+
+      - name: Ensure runtime tools exist
+        shell: bash
+        run: |
+          set -euxo pipefail
+          command -v racket
+          command -v chibi-ffi
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          LLVM_DIR="$(llvm-config --cmakedir)"
+          CLANG_DIR="$(dirname "${LLVM_DIR}")/clang"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="${LLVM_DIR}" \
+            -DClang_DIR="${CLANG_DIR}"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run runtime generation tests
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ctest --test-dir build --output-on-failure \
+            -R "optional_(chibi|racket)_generation_runtime" \
+            | tee /tmp/ctest-runtime.log
+
+          if grep -E "optional_(chibi|racket)_generation_runtime.*Skipped" /tmp/ctest-runtime.log; then
+            echo "Runtime generator tests must not be skipped in this job."
+            exit 1
+          fi
