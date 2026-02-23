@@ -127,6 +127,12 @@ private:
     return out;
   }
 
+  static std::string toSchemeName(const std::string &raw) {
+    std::string out = toSymbol(raw);
+    std::replace(out.begin(), out.end(), '_', '-');
+    return out;
+  }
+
   static std::string mapBuiltin(const BuiltinType *bt) {
     switch (bt->getKind()) {
     case BuiltinType::Void:
@@ -319,6 +325,7 @@ private:
     if (name.empty() || name == "anon")
       return;
 
+    std::string schemeRecordName = toSchemeName(name);
     std::string kind = decl->isUnion() ? "union:" : "struct:";
     std::string key = kind + name;
     if (emitted.find(key) != emitted.end())
@@ -336,8 +343,12 @@ private:
       std::string fname = it->getNameAsString();
       if (fname.empty())
         fname = "field_" + std::to_string(idx);
+      std::string fieldName = toSymbol(fname);
+      std::string getterName = schemeRecordName + "-" + toSchemeName(fname);
+      std::string setterName = "set-" + getterName + "!";
       llvm::outs() << "\n  (" << toTypeExpr(it->getType()) << " "
-                   << toSymbol(fname) << ")";
+                   << fieldName << " " << getterName << " " << setterName
+                   << ")";
     }
     llvm::outs() << ")\n\n";
   }
