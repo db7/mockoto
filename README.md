@@ -32,6 +32,7 @@ You should now have the executable `build/mockoto`, which can be installed in yo
     mockoto --mode H header.h another.h > mock_code.h
     mockoto --mode rkt header.h another.h > bindings.rkt
     mockoto --mode chibi header.h another.h > bindings.stub
+    mockoto --include-static --mode chibi header.h > bindings-with-static.stub
 
 Your test case can be compiled with `mock_code.c`.
 If you want to adapt the mock code from C, you can include `mock_code.h` and use the respective functions.
@@ -73,6 +74,9 @@ See [example](example) for a running example.
 For `--mode chibi`, the generated `.stub` can be compiled with `chibi-ffi`:
 
     chibi-ffi -c bindings.stub
+
+By default, static functions are skipped. Use `--include-static` to include
+them in generated output.
 
 ## Mockoto Limitations
 

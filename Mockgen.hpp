@@ -83,7 +83,8 @@ public:
       return true;
     }
 
-    if (decl->getStorageClass() == SC_Static ||
+    if ((!Config.includeStaticFunctions &&
+         decl->getStorageClass() == SC_Static) ||
         decl->getStorageClass() == SC_Extern) {
       // llvm::outs() << "// ignore: static or extern function\n\n";
       return true;

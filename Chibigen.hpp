@@ -246,7 +246,7 @@ private:
   void emitFunction(const FunctionDecl *decl) {
     if (!decl->hasPrototype())
       return;
-    if (decl->getStorageClass() == SC_Static)
+    if (!Config.includeStaticFunctions && decl->getStorageClass() == SC_Static)
       return;
 
     std::string name = toSymbol(decl->getQualifiedNameAsString());

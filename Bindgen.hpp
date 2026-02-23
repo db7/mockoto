@@ -262,6 +262,10 @@ public:
         definition << ";; function without prototype\n";
         return output(definition);
       }
+      if (!Config.includeStaticFunctions &&
+          decl->getStorageClass() == SC_Static) {
+        return true;
+      }
 
       auto ftype = decl->getType()->getAs<clang::FunctionProtoType>();
       auto ret = getTypeAsString(ftype->getReturnType(), dependencies);

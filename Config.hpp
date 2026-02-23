@@ -16,12 +16,14 @@ public:
   } mode;
 
   Config(std::list<std::string> excludePatterns, Mode mode)
-      : excludePatterns(excludePatterns), mode(mode) {}
+      : mode(mode), excludePatterns(excludePatterns), printSourcePath(false),
+        includeStaticFunctions(false) {}
 
   const std::list<std::string> excludePatterns;
   std::list<std::string> includeFiles;
 
   bool printSourcePath; //< print source path of each generated mock or binding
+  bool includeStaticFunctions;
 };
 
 } // namespace mockoto

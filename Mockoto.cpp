@@ -34,6 +34,10 @@ static cl::opt<bool>
     printSourcePath("print-src",
                     cl::desc("Print source path for each generated code"),
                     cl::cat(optionCategory));
+static cl::opt<bool>
+    includeStatic("include-static",
+                  cl::desc("Include static functions in generated output"),
+                  cl::cat(optionCategory));
 
 static cl::list<std::string>
     pathExclude("path-exclude", cl::desc("Exclude files with given substring"),
@@ -102,6 +106,7 @@ int main(int argc, const char **argv) {
 
   Config config(ep, mode);
   config.printSourcePath = printSourcePath.getValue();
+  config.includeStaticFunctions = includeStatic.getValue();
 
   // prepare include files
   std::vector<std::string> pathList = OptionsParser->getSourcePathList();
