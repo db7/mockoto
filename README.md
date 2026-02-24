@@ -1,12 +1,17 @@
-# Mockoto - a simple C mock generator with Racket bindings
+# Mockoto - C mock and FFI binding generator
 
-Mockoto is a tool help the testing of C code with [Racket](https://racket-lang.org).
+Mockoto is a tool help the testing of C code with [Racket][] or
+[Chibi Scheme][].
 
 Mockoto generates simple mock functions for C prototypes.
-These mock functions do not do anything by default, but can be ajusted conforming the desired test case.
-Mockoto also generates Racket bindings to all related types and hook functions.
-In this way, one can write test cases and mock code in Racket for C code.
+These mock functions do not do anything by default, but can be ajusted
+conforming the desired test case.
+Mockoto also generates Racket and Chibi Scheme bindings to all related types
+and hook functions. In this way, one can write test cases and mock code in
+Racket or Chibi Scheme for C code.
 
+[Racket]: https://racket-lang.org
+[Chibi Scheme]: https://github.com/ashinn/chibi-scheme
 
 ## Building
 
@@ -16,7 +21,8 @@ Ensure your system have these packages installed:
 - libclang-dev
 - xxd
 
-That should be sufficient to compile Mockoto, but if you want to write test cases in Racket you, of course, also need Racket installed.
+That should be sufficient to compile Mockoto, but if you want to write test
+cases in Racket you, of course, also need Racket installed.
 
 To build Mockoto run:
 
@@ -24,7 +30,8 @@ To build Mockoto run:
 	cmake -S . -B build
 	make -j
 
-You should now have the executable `build/mockoto`, which can be installed in your `PATH`.
+You should now have the executable `build/mockoto`, which can be installed in
+your `PATH`.
 
 ## Usage
 
@@ -35,10 +42,12 @@ You should now have the executable `build/mockoto`, which can be installed in yo
     mockoto -V
     mockoto --include-static --mode chibi header.h > bindings-with-static.stub
 
-Your test case can be compiled with `mock_code.c`.
-If you want to adapt the mock code from C, you can include `mock_code.h` and use the respective functions.
+Your test case can be compiled with `mock_code.c`.  If you want to adapt the
+mock code from C, you can include `mock_code.h` and use the respective
+functions.
 
-For a function `foo` declared in the given header file, the following functions are available:
+For a function `foo` declared in the given header file, the following functions
+are available:
 
     // This is the mock foo function, which does nothing by default.
     // The return value is a 0-ed value of the return type.
@@ -57,7 +66,8 @@ For a function `foo` declared in the given header file, the following functions 
     void mockoto_foo_hook(mockoto_foo_f cb);
 
 
-With `bindings.rkt` you have access to the mock from Racket. Here is the `foo` example:
+With `bindings.rkt` you have access to the mock from Racket. Here is the `foo`
+example:
 
     #lang racket
     (require rackunit
