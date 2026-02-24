@@ -1,3 +1,4 @@
+#include "clang/Basic/Version.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "llvm/Support/CommandLine.h"
@@ -5,6 +6,7 @@
 #include <cstdio>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -49,7 +51,11 @@ static cl::list<std::string>
 static cl::extrahelp
     moreHelp("\n" //
              "To pass options to clang use `--`, for example,\n"
-             "\tmockoto file.h -- -I.\n");
+             "\tmockoto file.h -- -I.\n"
+             "\n"
+             "Version:\n"
+             "\tmockoto --version   # clang/libclang version\n"
+             "\tmockoto -V\n");
 
 static std::string createIncludeSource(Config &config,
                                        std::vector<std::string> &files) {
@@ -80,6 +86,19 @@ static std::string createIncludeSource(Config &config,
 }
 
 int main(int argc, const char **argv) {
+  for (int i = 1; i < argc; i++) {
+    if (std::strcmp(argv[i], "--") == 0)
+      break;
+    if (std::strcmp(argv[i], "--version") == 0) {
+      llvm::outs() << clang::getClangFullVersion() << "\n";
+      return 0;
+    }
+    if (std::strcmp(argv[i], "-V") == 0) {
+      llvm::outs() << "mockoto " << mockoto::version() << "\n";
+      return 0;
+    }
+  }
+
   auto OptionsParser =
       CommonOptionsParser::create(argc, argv, optionCategory, cl::ZeroOrMore);
 

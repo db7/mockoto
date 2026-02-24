@@ -1,4 +1,4 @@
-.TH MOCKOTO 1 "February 2026" "mockoto 0.1" "User Commands"
+.TH MOCKOTO 1 "__DATE__" "mockoto __VERSION__" "User Commands"
 .SH NAME
 mockoto \- generate C mocks and language bindings from C headers
 .SH SYNOPSIS
@@ -27,6 +27,9 @@ Select output mode.
 .B --print-src
 Print source path comments in generated output.
 .TP
+.B --include-static
+Include static functions in generated output.
+.TP
 .BI --path-exclude " pattern"
 Exclude declarations from files whose path contains
 .IR pattern .
@@ -35,6 +38,12 @@ Can be provided multiple times.
 .BI --path-include " include-path"
 Add an include path hint to generated bindings.
 Can be provided multiple times.
+.TP
+.B -V
+Show mockoto version and exit.
+.TP
+.B --version
+Show LLVM/clang command line version information.
 .TP
 .B --help
 Show command help from LLVM command line parser.

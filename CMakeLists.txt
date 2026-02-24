@@ -5,8 +5,7 @@ set(CMAKE_CXX_COMPILER clang++)
 
 project(
     mockoto
-    LANGUAGES C CXX
-    VERSION 0.1)
+    LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -31,14 +30,15 @@ message("LLVM STATUS:
   Libraries   ${LLVM_LIBRARY_DIRS}"
 )
 
-list(APPEND LINK_LIBRARIES LLVM ${CLANG_LIBRARIES})
-
-# Determine if clang-cpp target is available
+# Determine if clang-cpp target is available.
+# When using clang-cpp, keep linkage minimal to avoid duplicate registration
+# of LLVM command line options.
 if(TARGET clang-cpp)
-  list(APPEND LINK_LIBRARIES clang-cpp)
+  set(LINK_LIBRARIES clang-cpp LLVM)
   message("Linking with clang-cpp target")
 else()
-  # For older versions, manually add necessary Clang libraries
+  # Fallback for older Clang installs.
+  list(APPEND LINK_LIBRARIES LLVM ${CLANG_LIBRARIES})
   list(APPEND LINK_LIBRARIES clangBasic clangAST clangFrontend clangSerialization clangTooling)
   message("Linking with individual Clang libraries")
 endif()
@@ -49,6 +49,31 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 # mockoto build rules
 ################################################################################
 
+set(MOCKOTO_VERSIONIZE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/.versionize.sh")
+set(MOCKOTO_VERSION_HEADER_IN "${CMAKE_CURRENT_SOURCE_DIR}/version.h.in")
+set(MOCKOTO_MANPAGE_IN "${CMAKE_CURRENT_SOURCE_DIR}/mockoto.1.in")
+set(MOCKOTO_VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/version.h")
+set(MOCKOTO_MANPAGE "${CMAKE_CURRENT_BINARY_DIR}/mockoto.1")
+
+add_custom_command(
+    OUTPUT "${MOCKOTO_VERSION_HEADER}"
+    COMMAND /bin/sh -c "'${MOCKOTO_VERSIONIZE_SCRIPT}' -r '${MOCKOTO_VERSION_HEADER_IN}' > '${MOCKOTO_VERSION_HEADER}'"
+    DEPENDS
+      "${MOCKOTO_VERSIONIZE_SCRIPT}"
+      "${MOCKOTO_VERSION_HEADER_IN}"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT "${MOCKOTO_MANPAGE}"
+    COMMAND /bin/sh -c "'${MOCKOTO_VERSIONIZE_SCRIPT}' -r '${MOCKOTO_MANPAGE_IN}' > '${MOCKOTO_MANPAGE}'"
+    DEPENDS
+      "${MOCKOTO_VERSIONIZE_SCRIPT}"
+      "${MOCKOTO_MANPAGE_IN}"
+    VERBATIM)
+
+add_custom_target(mockoto_versionized_files
+                  DEPENDS "${MOCKOTO_VERSION_HEADER}" "${MOCKOTO_MANPAGE}")
+
 # generate embedable file with binders rkt code
 add_custom_target(
     binders
@@ -57,10 +82,10 @@ add_custom_target(
     DEPENDS binders.rkt)
 
 # the tool binary
-add_executable(mockoto Mockoto.cpp)
+add_executable(mockoto Mockoto.cpp "${MOCKOTO_VERSION_HEADER}")
 
 # add dependency and path to binders.h header
-add_dependencies(mockoto binders)
+add_dependencies(mockoto binders mockoto_versionized_files)
 target_include_directories(mockoto PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 # link to clang and LLVM libraries
@@ -95,12 +120,10 @@ add_mockoto_test(multi_header_generates_all_funcs)
 add_mockoto_test(rkt_mode_generates_bindings)
 add_mockoto_test(chibi_mode_generates_stub)
 add_mockoto_test(unknown_mode_fails)
+add_mockoto_test(version_flags_show_version)
 add_mockoto_test(compile_and_run_generated_mock)
-add_mockoto_test(optional_chibi_generation_runtime)
 add_mockoto_test(optional_racket_generation_runtime)
 
-set_tests_properties(optional_chibi_generation_runtime
-                     PROPERTIES SKIP_RETURN_CODE 77)
 set_tests_properties(optional_racket_generation_runtime
                      PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -111,5 +134,5 @@ set_tests_properties(optional_racket_generation_runtime
 install(TARGETS mockoto
         RUNTIME DESTINATION bin)
 
-install(FILES mockoto.1
+install(FILES "${MOCKOTO_MANPAGE}"
         DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)

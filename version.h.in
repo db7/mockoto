@@ -1,0 +1,4 @@
+#ifndef MOCKOTO_VERSION_H
+#define MOCKOTO_VERSION_H
+#define MOCKOTO_VERSION "__VERSION__"
+#endif

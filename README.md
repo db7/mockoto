@@ -32,6 +32,7 @@ You should now have the executable `build/mockoto`, which can be installed in yo
     mockoto --mode H header.h another.h > mock_code.h
     mockoto --mode rkt header.h another.h > bindings.rkt
     mockoto --mode chibi header.h another.h > bindings.stub
+    mockoto -V
     mockoto --include-static --mode chibi header.h > bindings-with-static.stub
 
 Your test case can be compiled with `mock_code.c`.
