@@ -133,6 +133,91 @@ private:
     return out;
   }
 
+  static std::string normalizeDashes(const std::string &raw) {
+    std::string out;
+    out.reserve(raw.size());
+    bool prevDash = false;
+    for (unsigned char c : raw) {
+      if (c == '-') {
+        if (!prevDash) {
+          out.push_back('-');
+          prevDash = true;
+        }
+      } else {
+        out.push_back((char)c);
+        prevDash = false;
+      }
+    }
+    while (!out.empty() && out.front() == '-')
+      out.erase(out.begin());
+    while (!out.empty() && out.back() == '-')
+      out.pop_back();
+    return out.empty() ? "anon" : out;
+  }
+
+  static bool parseTrailingLineCol(const std::string &s, std::string &line,
+                                   std::string &col) {
+    if (s.empty())
+      return false;
+    size_t end = s.size();
+    if (end > 0 && s[end - 1] == '_')
+      end--;
+    if (end == 0)
+      return false;
+
+    size_t i = end;
+    while (i > 0 && std::isdigit((unsigned char)s[i - 1]))
+      i--;
+    if (i == end || i == 0 || s[i - 1] != '_')
+      return false;
+    col = s.substr(i, end - i);
+
+    end = i - 1;
+    i = end;
+    while (i > 0 && std::isdigit((unsigned char)s[i - 1]))
+      i--;
+    if (i == end || i == 0 || s[i - 1] != '_')
+      return false;
+    line = s.substr(i, end - i);
+    return true;
+  }
+
+  static std::string accessorPrefixForRecord(const std::string &recordName) {
+    size_t marker = std::string::npos;
+    std::string kind = "type";
+
+    marker = recordName.find("__union__unnamed_at__");
+    if (marker != std::string::npos)
+      kind = "union";
+    if (marker == std::string::npos) {
+      marker = recordName.find("__struct__unnamed_at__");
+      if (marker != std::string::npos)
+        kind = "struct";
+    }
+    if (marker == std::string::npos)
+      marker = recordName.find("__unnamed_at__");
+    if (marker == std::string::npos)
+      return toSchemeName(recordName);
+
+    std::string base = recordName.substr(0, marker);
+    size_t anonBase = base.find("___anonymous_");
+    if (anonBase != std::string::npos)
+      base = base.substr(0, anonBase);
+    if (base.empty())
+      base = "anon";
+
+    std::string prefix = normalizeDashes(toSchemeName(base));
+    std::string line, col;
+    if (parseTrailingLineCol(recordName, line, col))
+      return prefix + "-anon-" + kind + "-" + line + "-" + col;
+    return prefix + "-anon-" + kind;
+  }
+
+  static bool isSyntheticAnonymousRecordName(const std::string &name) {
+    return name.find("__unnamed_at__") != std::string::npos ||
+           name.find("___anonymous_") != std::string::npos;
+  }
+
   static std::string mapBuiltin(const BuiltinType *bt) {
     switch (bt->getKind()) {
     case BuiltinType::Void:
@@ -181,20 +266,24 @@ private:
     if (type->isPointerType()) {
       QualType p = type->getPointeeType();
       p.removeLocalFastQualifiers();
+      if (const ElaboratedType *pet = dyn_cast<ElaboratedType>(p.getTypePtr())) {
+        p = pet->getNamedType();
+        p.removeLocalFastQualifiers();
+      }
       if (p->isVoidType())
         return "(pointer void)";
       if (p->isFunctionType())
         return "(pointer void)";
-      if (p->isCharType())
-        return "string";
-      if (p->isStructureType() || p->isUnionType() || p->isEnumeralType())
-        return toTypeExpr(p);
       if (const TypedefType *tt = dyn_cast<TypedefType>(p.getTypePtr())) {
         QualType ut = tt->getDecl()->getUnderlyingType();
         ut.removeLocalFastQualifiers();
         if (ut->isStructureType() || ut->isUnionType() || ut->isEnumeralType())
-          return toTypeExpr(p);
+          return toTypeExpr(ut);
       }
+      if (p->isCharType())
+        return "string";
+      if (p->isStructureType() || p->isUnionType() || p->isEnumeralType())
+        return toTypeExpr(p);
       return "(pointer " + toTypeExpr(p) + ")";
     }
 
@@ -208,6 +297,11 @@ private:
       return "(array " + elem + " " +
              std::to_string(at->getSize().getLimitedValue()) + ")";
     }
+    if (const IncompleteArrayType *iat =
+            dyn_cast<IncompleteArrayType>(type.getTypePtr())) {
+      std::string elem = toTypeExpr(iat->getElementType());
+      return "(array " + elem + " 0)";
+    }
 
     if (const BuiltinType *bt = dyn_cast<BuiltinType>(type.getTypePtr())) {
       return mapBuiltin(bt);
@@ -218,18 +312,27 @@ private:
     }
 
     if (type->isEnumeralType()) {
-      if (const TagDecl *td = type->getAsTagDecl()) {
-        return toSymbol(td->getQualifiedNameAsString());
-      }
+      // Chibi C wrappers expect a plain C arithmetic type for enum fields.
+      // Using tag names here can produce invalid C for anonymous/untagged enums.
       return "int";
     }
 
     if (type->isStructureType() || type->isUnionType()) {
       if (const RecordType *rt = type->getAsStructureType()) {
-        return toSymbol(rt->getDecl()->getQualifiedNameAsString());
+        std::string name = toSymbol(rt->getDecl()->getQualifiedNameAsString());
+        if (isSyntheticAnonymousRecordName(name)) {
+          uint64_t bytes = Context->getTypeSize(type) / 8;
+          return "(array uint8_t " + std::to_string(bytes) + ")";
+        }
+        return name;
       }
       if (const RecordType *rt = type->getAsUnionType()) {
-        return toSymbol(rt->getDecl()->getQualifiedNameAsString());
+        std::string name = toSymbol(rt->getDecl()->getQualifiedNameAsString());
+        if (isSyntheticAnonymousRecordName(name)) {
+          uint64_t bytes = Context->getTypeSize(type) / 8;
+          return "(array uint8_t " + std::to_string(bytes) + ")";
+        }
+        return name;
       }
       return "(pointer void)";
     }
@@ -249,6 +352,39 @@ private:
     return toSymbol(ts);
   }
 
+  bool isByValueRecordOrUnion(QualType type) const {
+    type.removeLocalFastQualifiers();
+    if (type->isPointerType() || type->isReferenceType())
+      return false;
+    if (const ElaboratedType *et =
+            dyn_cast<ElaboratedType>(type.getTypePtr())) {
+      return isByValueRecordOrUnion(et->getNamedType());
+    }
+    if (const TypedefType *tt = dyn_cast<TypedefType>(type.getTypePtr())) {
+      return isByValueRecordOrUnion(tt->getDecl()->getUnderlyingType());
+    }
+    return type->isStructureType() || type->isUnionType();
+  }
+
+  bool shouldSkipTypedef(const TypedefNameDecl *decl) const {
+    QualType ut = decl->getUnderlyingType();
+    ut.removeLocalFastQualifiers();
+
+    // chibi-ffi generates pointer aliases for record typedefs; these become
+    // invalid for common C forms like `typedef struct foo foo;`.
+    if (isByValueRecordOrUnion(ut))
+      return true;
+    if (ut->isFunctionPointerType() || ut->isFunctionType())
+      return true;
+
+    std::string name = toSymbol(decl->getQualifiedNameAsString());
+    std::string underlying = toTypeExpr(ut);
+    if (name == underlying)
+      return true;
+
+    return false;
+  }
+
   void emitFunction(const FunctionDecl *decl) {
     if (!decl->hasPrototype())
       return;
@@ -264,6 +400,12 @@ private:
     auto ftype = decl->getType()->getAs<FunctionProtoType>();
     if (ftype == NULL)
       return;
+    if (isByValueRecordOrUnion(ftype->getReturnType()))
+      return;
+    for (unsigned i = 0; i < ftype->getNumParams(); i++) {
+      if (isByValueRecordOrUnion(ftype->getParamType(i)))
+        return;
+    }
 
     llvm::outs() << ";; function " << name << "\n";
     llvm::outs() << "(define-c " << toTypeExpr(ftype->getReturnType()) << " "
@@ -284,6 +426,8 @@ private:
     std::string name = toSymbol(decl->getQualifiedNameAsString());
     std::string key = "typedef:" + name;
     if (emitted.find(key) != emitted.end())
+      return;
+    if (shouldSkipTypedef(decl))
       return;
     emitted.insert(key);
 
@@ -324,8 +468,10 @@ private:
     std::string name = toSymbol(decl->getQualifiedNameAsString());
     if (name.empty() || name == "anon")
       return;
+    if (isSyntheticAnonymousRecordName(name))
+      return;
 
-    std::string schemeRecordName = toSchemeName(name);
+    std::string schemeRecordName = accessorPrefixForRecord(name);
     std::string kind = decl->isUnion() ? "union:" : "struct:";
     std::string key = kind + name;
     if (emitted.find(key) != emitted.end())
@@ -336,7 +482,7 @@ private:
                  << "\n";
     llvm::outs() << "("
                  << (decl->isUnion() ? "define-c-union " : "define-c-struct ")
-                 << name;
+                 << name << " constructor: (make-" << schemeRecordName << ")";
 
     unsigned idx = 0;
     for (auto it = decl->field_begin(); it != decl->field_end(); it++, idx++) {
@@ -346,9 +492,16 @@ private:
       std::string fieldName = toSymbol(fname);
       std::string getterName = schemeRecordName + "-" + toSchemeName(fname);
       std::string setterName = "set-" + getterName + "!";
-      llvm::outs() << "\n  (" << toTypeExpr(it->getType()) << " "
-                   << fieldName << " " << getterName << " " << setterName
-                   << ")";
+      QualType ftype = it->getType();
+      ftype.removeLocalFastQualifiers();
+      std::string typeExpr = toTypeExpr(it->getType());
+      bool noAccessors = ftype->isArrayType() ||
+                         typeExpr.rfind("(array ", 0) == 0 ||
+                         isByValueRecordOrUnion(ftype);
+      llvm::outs() << "\n  (" << typeExpr << " " << fieldName;
+      if (!noAccessors)
+        llvm::outs() << " " << getterName << " " << setterName;
+      llvm::outs() << ")";
     }
     llvm::outs() << ")\n\n";
   }
