@@ -164,6 +164,17 @@ case "$CASE_NAME" in
     assert_contains "(define-c int multiply (int int))" "$out"
     ;;
 
+  chibi_mode_uint8_pointer_not_string)
+    out="$WORK_DIR/chibi-bytes.stub"
+    run_mockoto "$out" --mode chibi tests/fixtures/chibi_bytes.h -- -Itests/fixtures
+    assert_contains "(define-c int read_byte ((pointer void)))" "$out"
+    assert_contains "(define-c int read_text (string))" "$out"
+    assert_contains "(define-c int write_bytes ((pointer void) uint8_t))" "$out"
+    assert_contains "(define-c int write_text (string))" "$out"
+    assert_not_contains "(define-c int read_byte (string))" "$out"
+    assert_not_contains "(define-c int write_bytes (string uint8_t))" "$out"
+    ;;
+
   unknown_mode_fails)
     out="$WORK_DIR/unknown_mode.log"
     if "$MOCKOTO" --mode nope tests/fixtures/basic.h -- -Itests/fixtures >"$out" 2>&1; then

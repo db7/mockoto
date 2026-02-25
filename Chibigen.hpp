@@ -255,6 +255,36 @@ private:
     }
   }
 
+  bool isCStringPointee(QualType type) const {
+    QualType qt = type.getDesugaredType(*Context);
+    qt.removeLocalFastQualifiers();
+    const BuiltinType *bt = dyn_cast<BuiltinType>(qt.getTypePtr());
+    if (!bt)
+      return false;
+    switch (bt->getKind()) {
+    case BuiltinType::Char_S:
+    case BuiltinType::Char_U:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  bool isByteBufferPointee(QualType type) const {
+    QualType qt = type.getDesugaredType(*Context);
+    qt.removeLocalFastQualifiers();
+    const BuiltinType *bt = dyn_cast<BuiltinType>(qt.getTypePtr());
+    if (!bt)
+      return false;
+    switch (bt->getKind()) {
+    case BuiltinType::UChar:
+    case BuiltinType::SChar:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   std::string toTypeExpr(QualType type) const {
     type.removeLocalFastQualifiers();
 
@@ -280,8 +310,10 @@ private:
         if (ut->isStructureType() || ut->isUnionType() || ut->isEnumeralType())
           return toTypeExpr(ut);
       }
-      if (p->isCharType())
+      if (isCStringPointee(p))
         return "string";
+      if (isByteBufferPointee(p))
+        return "(pointer void)";
       if (p->isStructureType() || p->isUnionType() || p->isEnumeralType())
         return toTypeExpr(p);
       return "(pointer " + toTypeExpr(p) + ")";
