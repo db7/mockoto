@@ -1,5 +1,5 @@
-#ifndef MOCKOTO_BINDGEN_HPP
-#define MOCKOTO_BINDGEN_HPP
+#ifndef MOCKOTO_RACKET_GEN_HPP
+#define MOCKOTO_RACKET_GEN_HPP
 
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
@@ -28,7 +28,7 @@ const std::string prolog = R"rkt(
 (define _uintptr_t _uint64)
 )rkt";
 
-class BindgenVisitor : public RecursiveASTVisitor<BindgenVisitor> {
+class RacketGenVisitor : public RecursiveASTVisitor<RacketGenVisitor> {
   ASTContext *Context;
   mockoto::Config Config;
   llvm::StringRef InFile;
@@ -72,7 +72,7 @@ class BindgenVisitor : public RecursiveASTVisitor<BindgenVisitor> {
   }
 
 public:
-  ~BindgenVisitor() {
+  ~RacketGenVisitor() {
     for (auto i = dependsOn.begin(); i != dependsOn.end(); i++) {
       if (i->second.size() == 1 && i->second.find("_void") != i->second.end()) {
         llvm::outs() << ";; postponed\n";
@@ -94,7 +94,7 @@ public:
   int anonCount;
 
 public:
-  explicit BindgenVisitor(ASTContext *Context, mockoto::Config &Config,
+  explicit RacketGenVisitor(ASTContext *Context, mockoto::Config &Config,
                           llvm::StringRef InFile)
       : Context(Context), Config(Config), InFile(InFile) {
 

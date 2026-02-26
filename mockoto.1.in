@@ -13,7 +13,7 @@ should be passed after
 .B -- .
 .SH OPTIONS
 .TP
-.BI --mode " c|h|rkt|chibi"
+.BI --mode " c|h|rkt|chibi|chicken"
 Select output mode.
 
 \fBc\fR (default): generate mock implementation C code.
@@ -23,6 +23,8 @@ Select output mode.
 \fBrkt\fR: generate Racket bindings.
 
 \fBchibi\fR: generate Chibi Scheme FFI stubs.
+
+\fBchicken\fR: generate CHICKEN Scheme bindings using crunch forms.
 .TP
 .B --print-src
 Print source path comments in generated output.
@@ -71,6 +73,12 @@ Generate Chibi stub:
 .IP
 .EX
 mockoto --mode chibi client.h server.h -- -I.
+.EE
+.TP
+Generate CHICKEN bindings:
+.IP
+.EX
+mockoto --mode chicken client.h server.h -- -I.
 .EE
 .SH EXIT STATUS
 .TP

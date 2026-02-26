@@ -16,10 +16,11 @@
 #include <sstream> //std::stringstream
 
 #include "ActionFactory.hpp"
-#include "Bindgen.hpp"
-#include "Chibigen.hpp"
+#include "RacketGen.hpp"
+#include "ChibiGen.hpp"
+#include "ChickenGen.hpp"
 #include "Config.hpp"
-#include "Mockgen.hpp"
+#include "MockGen.hpp"
 
 using namespace clang;
 using namespace clang::tooling;
@@ -29,7 +30,7 @@ using namespace mockoto;
 static cl::OptionCategory optionCategory("Mockoto Options");
 
 static cl::opt<std::string> modeOpt("mode",
-                                    cl::desc("Select output mode (c|h|rkt|chibi)"),
+                                    cl::desc("Select output mode (c|h|rkt|chibi|chicken)"),
                                     cl::cat(optionCategory));
 
 static cl::opt<bool>
@@ -118,6 +119,8 @@ int main(int argc, const char **argv) {
     mode = Config::Mode::BIND_RKT;
   } else if (modeVal == "chibi") {
     mode = Config::Mode::BIND_CHIBI;
+  } else if (modeVal == "chicken") {
+    mode = Config::Mode::BIND_CHICKEN;
   } else {
     llvm::outs() << "Unknown mode '" << modeVal << "'\n";
     return 1;
@@ -139,11 +142,13 @@ int main(int argc, const char **argv) {
   // select right action
   int r = 0;
   if (mode == Config::Mode::BIND_RKT) {
-    r = Tool.run(newActionFactory<BindgenVisitor>(config).get());
+    r = Tool.run(newActionFactory<RacketGenVisitor>(config).get());
   } else if (mode == Config::Mode::BIND_CHIBI) {
-    r = Tool.run(newActionFactory<ChibigenVisitor>(config).get());
+    r = Tool.run(newActionFactory<ChibiGenVisitor>(config).get());
+  } else if (mode == Config::Mode::BIND_CHICKEN) {
+    r = Tool.run(newActionFactory<ChickenGenVisitor>(config).get());
   } else {
-    r = Tool.run(newActionFactory<MockgenVisitor>(config).get());
+    r = Tool.run(newActionFactory<MockGenVisitor>(config).get());
   }
 
   // cleanup

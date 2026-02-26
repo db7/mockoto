@@ -1,17 +1,18 @@
 # Mockoto - C mock and FFI binding generator
 
-Mockoto is a tool help the testing of C code with [Racket][] or
-[Chibi Scheme][].
+Mockoto is a tool help the testing of C code with [Racket][],
+[Chibi Scheme][], or [CHICKEN Scheme][].
 
 Mockoto generates simple mock functions for C prototypes.
 These mock functions do not do anything by default, but can be ajusted
 conforming the desired test case.
-Mockoto also generates Racket and Chibi Scheme bindings to all related types
-and hook functions. In this way, one can write test cases and mock code in
-Racket or Chibi Scheme for C code.
+Mockoto also generates Racket, Chibi Scheme, and CHICKEN Scheme bindings to
+all related types and hook functions. In this way, one can write test cases
+and mock code in Scheme for C code.
 
 [Racket]: https://racket-lang.org
 [Chibi Scheme]: https://github.com/ashinn/chibi-scheme
+[CHICKEN Scheme]: https://www.call-cc.org
 
 ## Building
 
@@ -39,6 +40,7 @@ your `PATH`.
     mockoto --mode H header.h another.h > mock_code.h
     mockoto --mode rkt header.h another.h > bindings.rkt
     mockoto --mode chibi header.h another.h > bindings.stub
+    mockoto --mode chicken header.h another.h > bindings.chicken.scm
     mockoto -V
     mockoto --include-static --mode chibi header.h > bindings-with-static.stub
 
@@ -85,6 +87,11 @@ See [example](example) for a running example.
 For `--mode chibi`, the generated `.stub` can be compiled with `chibi-ffi`:
 
     chibi-ffi -c bindings.stub
+
+For `--mode chicken`, the generated `.scm` bindings use `crunch` forms and can
+be included in CHICKEN code:
+
+    (include "bindings.chicken.scm")
 
 By default, static functions are skipped. Use `--include-static` to include
 them in generated output.
