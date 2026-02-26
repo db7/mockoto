@@ -1,0 +1,9 @@
+mock/
+*.o
+*.so
+*.dylib
+*.dSYM
+tidset_c_test
+tidset_chicken_test
+memmgr_runtime_mock.c
+memmgr_runtime_mock.h

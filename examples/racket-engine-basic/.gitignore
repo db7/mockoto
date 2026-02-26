@@ -1,0 +1,6 @@
+mock/
+engine_mock.c
+engine_mock.h
+libengine_component.so
+libengine_component.dylib
+*.dSYM

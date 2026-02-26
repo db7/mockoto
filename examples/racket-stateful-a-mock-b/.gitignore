@@ -1,0 +1,6 @@
+mock/
+b_mock.c
+b_mock.h
+liba_component.so
+liba_component.dylib
+*.dSYM

@@ -1,0 +1,4 @@
+runtime_mock.c
+runtime_mock.h
+pure_c_test
+*.dSYM

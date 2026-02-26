@@ -1,0 +1,6 @@
+mock/
+trace_mock.c
+trace_mock.h
+libpipeline_component.so
+libpipeline_component.dylib
+*.dSYM
