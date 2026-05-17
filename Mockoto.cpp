@@ -16,10 +16,10 @@
 #include <sstream> //std::stringstream
 
 #include "ActionFactory.hpp"
-#include "Bindgen.hpp"
-#include "Chibigen.hpp"
+#include "ChibiGen.hpp"
 #include "Config.hpp"
-#include "Mockgen.hpp"
+#include "MockGen.hpp"
+#include "RacketGen.hpp"
 
 using namespace clang;
 using namespace clang::tooling;
@@ -28,9 +28,9 @@ using namespace mockoto;
 
 static cl::OptionCategory optionCategory("Mockoto Options");
 
-static cl::opt<std::string> modeOpt("mode",
-                                    cl::desc("Select output mode (c|h|rkt|chibi)"),
-                                    cl::cat(optionCategory));
+static cl::opt<std::string> modeOpt(
+    "mode", cl::desc("Select output mode (c|h|rkt|chibi)"),
+    cl::cat(optionCategory));
 
 static cl::opt<bool>
     printSourcePath("print-src",
@@ -139,11 +139,11 @@ int main(int argc, const char **argv) {
   // select right action
   int r = 0;
   if (mode == Config::Mode::BIND_RKT) {
-    r = Tool.run(newActionFactory<BindgenVisitor>(config).get());
+    r = Tool.run(newActionFactory<RacketGenVisitor>(config).get());
   } else if (mode == Config::Mode::BIND_CHIBI) {
-    r = Tool.run(newActionFactory<ChibigenVisitor>(config).get());
+    r = Tool.run(newActionFactory<ChibiGenVisitor>(config).get());
   } else {
-    r = Tool.run(newActionFactory<MockgenVisitor>(config).get());
+    r = Tool.run(newActionFactory<MockGenVisitor>(config).get());
   }
 
   // cleanup
