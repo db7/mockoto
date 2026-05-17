@@ -175,6 +175,28 @@ case "$CASE_NAME" in
     assert_not_contains "(define-c int write_bytes (string uint8_t))" "$out"
     ;;
 
+  chibi_c_mode_generates_wrappers)
+    mock_h="$WORK_DIR/chibi_c_mock.h"
+    out="$WORK_DIR/chibi_c_bindings.c"
+    run_mockoto "$mock_h" --mode h tests/fixtures/chibi_c.h -- -Itests/fixtures
+    run_mockoto "$out" --mode chibi-c "$mock_h" -- -I"$WORK_DIR" -I"$SRC_DIR"
+    assert_contains "#include <chibi/eval.h>" "$out"
+    assert_contains "sexp_init_library" "$out"
+    assert_contains "sexp_mockoto_twi_start_hook_stub" "$out"
+    assert_contains "mockoto_chibi_cb_mockoto_twi_read_nack_hook" "$out"
+    assert_contains "sexp_mockoto_twi_write_regs_called_stub" "$out"
+    ;;
+
+  chibi_c_mode_compiles)
+    mock_h="$WORK_DIR/chibi_c_mock.h"
+    out="$WORK_DIR/chibi_c_bindings.c"
+    obj="$WORK_DIR/chibi_c_bindings.o"
+    run_mockoto "$mock_h" --mode h tests/fixtures/chibi_c.h -- -Itests/fixtures
+    run_mockoto "$out" --mode chibi-c "$mock_h" -- -I"$WORK_DIR" -I"$SRC_DIR"
+    "$CC_BIN" -std=c99 -Wall -Werror -I"$WORK_DIR" -I"$SRC_DIR" -I/usr/local/pkg/include \
+      -c "$out" -o "$obj"
+    ;;
+
   unknown_mode_fails)
     out="$WORK_DIR/unknown_mode.log"
     if "$MOCKOTO" --mode nope tests/fixtures/basic.h -- -Itests/fixtures >"$out" 2>&1; then

@@ -39,6 +39,7 @@ your `PATH`.
     mockoto --mode H header.h another.h > mock_code.h
     mockoto --mode rkt header.h another.h > bindings.rkt
     mockoto --mode chibi header.h another.h > bindings.stub
+    mockoto --mode chibi-c header.h another.h > bindings.c
     mockoto -V
     mockoto --include-static --mode chibi header.h > bindings-with-static.stub
 
@@ -85,6 +86,10 @@ See [example](example) for a running example.
 For `--mode chibi`, the generated `.stub` can be compiled with `chibi-ffi`:
 
     chibi-ffi -c bindings.stub
+
+For `--mode chibi-c`, Mockoto generates a C source file which uses Chibi's
+embedding API directly and can be compiled into a loadable module without
+going through `chibi-ffi`.
 
 By default, static functions are skipped. Use `--include-static` to include
 them in generated output.

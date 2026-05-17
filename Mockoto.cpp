@@ -16,6 +16,7 @@
 #include <sstream> //std::stringstream
 
 #include "ActionFactory.hpp"
+#include "ChibiCGen.hpp"
 #include "ChibiGen.hpp"
 #include "Config.hpp"
 #include "MockGen.hpp"
@@ -29,7 +30,7 @@ using namespace mockoto;
 static cl::OptionCategory optionCategory("Mockoto Options");
 
 static cl::opt<std::string> modeOpt(
-    "mode", cl::desc("Select output mode (c|h|rkt|chibi)"),
+    "mode", cl::desc("Select output mode (c|h|rkt|chibi|chibi-c)"),
     cl::cat(optionCategory));
 
 static cl::opt<bool>
@@ -118,6 +119,8 @@ int main(int argc, const char **argv) {
     mode = Config::Mode::BIND_RKT;
   } else if (modeVal == "chibi") {
     mode = Config::Mode::BIND_CHIBI;
+  } else if (modeVal == "chibi-c") {
+    mode = Config::Mode::BIND_CHIBI_C;
   } else {
     llvm::outs() << "Unknown mode '" << modeVal << "'\n";
     return 1;
@@ -142,6 +145,8 @@ int main(int argc, const char **argv) {
     r = Tool.run(newActionFactory<RacketGenVisitor>(config).get());
   } else if (mode == Config::Mode::BIND_CHIBI) {
     r = Tool.run(newActionFactory<ChibiGenVisitor>(config).get());
+  } else if (mode == Config::Mode::BIND_CHIBI_C) {
+    r = Tool.run(newActionFactory<ChibiCGenVisitor>(config).get());
   } else {
     r = Tool.run(newActionFactory<MockGenVisitor>(config).get());
   }
