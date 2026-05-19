@@ -187,6 +187,29 @@ case "$CASE_NAME" in
     assert_contains "sexp_mockoto_twi_write_regs_called_stub" "$out"
     ;;
 
+  chibi_c_mode_generates_struct_helpers)
+    out="$WORK_DIR/chibi_structs_bindings.c"
+    run_mockoto "$out" --mode chibi-c tests/fixtures/chibi_structs.h -- -Itests/fixtures
+    assert_contains "sexp_sample_report_X2dmake_make_stub" "$out"
+    assert_contains "sexp_sample_report_X2ddestroy_destroy_stub" "$out"
+    assert_contains "sexp_sample_report_X2dx_stub" "$out"
+    assert_contains "sexp_sample_report_X2dx_set_stub" "$out"
+    assert_contains "sexp_sample_report_X2dscroll_stub" "$out"
+    assert_contains "sexp_define_foreign(ctx, env, \"sample_report-x\", 1, sexp_sample_report_X2dx_stub)" "$out"
+    assert_contains "sexp_define_foreign(ctx, env, \"sample_report-x!\", 2, sexp_sample_report_X2dx_set_stub)" "$out"
+    assert_contains "struct sample_report *ptr = (struct sample_report *)calloc(1, sizeof(struct sample_report));" "$out"
+    assert_contains "sexp_env_define(ctx, env, sexp_intern(ctx, \"SAMPLE_MORE\", -1)" "$out"
+    ;;
+
+  chibi_c_mode_preserves_tag_keywords)
+    out="$WORK_DIR/chibi_tags_bindings.c"
+    run_mockoto "$out" --mode chibi-c tests/fixtures/chibi_tags.h -- -Itests/fixtures
+    assert_contains "ptr ? ptr->color : (enum color)0" "$out"
+    assert_contains "ptr->color = (enum color)sexp_uint_value(arg1);" "$out"
+    assert_contains "(struct item *)sexp_cpointer_maybe_null_value(arg1)" "$out"
+    assert_contains "(union payload *)sexp_cpointer_maybe_null_value(arg1)" "$out"
+    ;;
+
   chibi_c_mode_compiles)
     mock_h="$WORK_DIR/chibi_c_mock.h"
     out="$WORK_DIR/chibi_c_bindings.c"

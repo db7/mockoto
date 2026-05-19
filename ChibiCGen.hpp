@@ -29,6 +29,7 @@ class ChibiCGenVisitor : public RecursiveASTVisitor<ChibiCGenVisitor> {
   std::set<std::string> emitted;
   std::vector<std::string> foreignRegistrations;
   std::vector<std::string> hookDispatches;
+  std::vector<std::string> constantDefinitions;
 
 public:
   explicit ChibiCGenVisitor(ASTContext *Context, mockoto::Config Config,
@@ -134,6 +135,8 @@ sexp_init_library(sexp ctx, sexp self, sexp_sint_t n, sexp env,
 )c";
     for (const auto &s : foreignRegistrations)
       llvm::outs() << s;
+    for (const auto &s : constantDefinitions)
+      llvm::outs() << s;
     llvm::outs() << "  op = sexp_define_foreign(ctx, env, \"mockoto_mock\", 2, "
                     "sexp_mockoto_mock_stub);\n";
     llvm::outs() << "  if (sexp_opcodep(op)) {\n";
@@ -167,10 +170,22 @@ sexp_init_library(sexp ctx, sexp self, sexp_sint_t n, sexp env,
       return true;
 
     const FunctionDecl *fdecl = dyn_cast<FunctionDecl>(NamedDecl);
-    if (!fdecl)
+    if (fdecl) {
+      emitFunction(fdecl);
       return true;
+    }
 
-    emitFunction(fdecl);
+    const RecordDecl *rdecl = dyn_cast<RecordDecl>(NamedDecl);
+    if (rdecl) {
+      emitRecordHelpers(rdecl);
+      return true;
+    }
+
+    const EnumDecl *edecl = dyn_cast<EnumDecl>(NamedDecl);
+    if (edecl) {
+      emitEnumConstants(edecl);
+      return true;
+    }
     return true;
   }
 
@@ -231,10 +246,58 @@ private:
     return out;
   }
 
+  static std::string encodeSyntheticName(const std::string &raw) {
+    static const char *hex = "0123456789abcdef";
+    std::string out;
+    out.reserve(raw.size() * 4);
+    for (unsigned char c : raw) {
+      if (std::isalnum(c) || c == '_') {
+        out.push_back((char)c);
+        continue;
+      }
+      out += "_X";
+      out.push_back(hex[(c >> 4) & 0x0f]);
+      out.push_back(hex[c & 0x0f]);
+    }
+    if (!out.empty() && std::isdigit((unsigned char)out[0]))
+      out = "t_" + out;
+    return out;
+  }
+
+  static std::string syntheticSchemeName(const std::string &recordName,
+                                         const std::string &suffix) {
+    return recordName + "-" + suffix;
+  }
+
+  std::string cEnumType(const EnumDecl *decl) const {
+    if (const TypedefNameDecl *typedefDecl = decl->getTypedefNameForAnonDecl())
+      return typedefDecl->getNameAsString();
+    return "enum " + decl->getQualifiedNameAsString();
+  }
+
   std::string cType(QualType type) const {
+    type = canonicalType(type);
+    if (const EnumType *et = type->getAs<EnumType>())
+      return cEnumType(et->getDecl());
     PrintingPolicy pp(Context->getLangOpts());
     pp.adjustForCPlusPlus();
+    pp.SuppressTagKeyword = false;
     return type.getAsString(pp);
+  }
+
+  std::string cRecordType(const RecordDecl *decl) const {
+    if (const TypedefNameDecl *typedefDecl = decl->getTypedefNameForAnonDecl())
+      return typedefDecl->getNameAsString();
+
+    std::string kind;
+    if (decl->isStruct())
+      kind = "struct ";
+    else if (decl->isUnion())
+      kind = "union ";
+    else if (decl->isClass())
+      kind = "class ";
+
+    return kind + decl->getQualifiedNameAsString();
   }
 
   QualType canonicalType(QualType type) const {
@@ -300,6 +363,12 @@ private:
   bool isSupportedPointer(QualType type) const {
     type = canonicalType(type);
     return type->isPointerType();
+  }
+
+  bool isSupportedFieldType(QualType type) const {
+    type = canonicalType(type);
+    return isBool(type) || isIntegerLike(type) || isCString(type) ||
+           isSupportedPointer(type);
   }
 
   const FunctionProtoType *asFunctionProto(QualType type) const {
@@ -407,7 +476,7 @@ private:
     if (isVoid(type))
       return "SEXP_VOID";
     if (isBool(type))
-      return "(" + expr + " ? SEXP_TRUE : SEXP_FALSE)";
+      return "((" + expr + ") ? SEXP_TRUE : SEXP_FALSE)";
     if (isIntegerLike(type)) {
       if (isUnsignedIntegerLike(type))
         return "sexp_make_unsigned_integer(ctx, " + expr + ")";
@@ -465,6 +534,120 @@ private:
       emitHookSetter(decl, name, asFunctionType(ft->getParamType(0)));
     } else if (canEmitDirectWrapper(decl)) {
       emitDirectWrapper(decl, name);
+    }
+  }
+
+  void emitRecordHelpers(const RecordDecl *decl) {
+    if (!decl->isCompleteDefinition() || decl->getName().empty())
+      return;
+
+    std::string recordName = toSymbol(decl->getQualifiedNameAsString());
+    std::string emittedKey = "record:" + recordName;
+    if (emitted.find(emittedKey) != emitted.end())
+      return;
+    emitted.insert(emittedKey);
+
+    std::string recordType = cRecordType(decl);
+
+    std::string makeName = syntheticSchemeName(recordName, "make");
+    std::string makeStubName = encodeSyntheticName(makeName);
+    std::string destroyName = syntheticSchemeName(recordName, "destroy");
+    std::string destroyStubName = encodeSyntheticName(destroyName);
+
+    llvm::outs() << "static sexp\nsexp_" << makeStubName
+                 << "_make_stub(sexp ctx, sexp self, sexp_sint_t n)\n{\n";
+    llvm::outs() << "  " << recordType << " *ptr = (" << recordType
+                 << " *)calloc(1, sizeof(" << recordType << "));\n";
+    llvm::outs() << "  if (!ptr)\n";
+    llvm::outs() << "    return sexp_xtype_exception(ctx, self, \""
+                 << makeName << ": allocation failed\", SEXP_FALSE);\n";
+    llvm::outs() << "  return sexp_make_cpointer(ctx, SEXP_CPOINTER, ptr, "
+                    "SEXP_FALSE, 1);\n";
+    llvm::outs() << "}\n\n";
+    appendForeignRegistration(makeName, makeStubName + "_make",
+                              "sexp_make_fixnum(SEXP_CPOINTER)", {});
+
+    llvm::outs() << "static sexp\nsexp_" << destroyStubName
+                 << "_destroy_stub(sexp ctx, sexp self, sexp_sint_t n, sexp arg0)\n{\n";
+    llvm::outs() << "  if (!sexp_cpointerp(arg0) && !sexp_not(arg0))\n";
+    llvm::outs() << "    return sexp_type_exception(ctx, self, SEXP_CPOINTER, arg0);\n";
+    llvm::outs() << "  free((" << recordType
+                 << " *)sexp_cpointer_maybe_null_value(arg0));\n";
+    llvm::outs() << "  return SEXP_VOID;\n";
+    llvm::outs() << "}\n\n";
+    appendForeignRegistration(destroyName, destroyStubName + "_destroy", "SEXP_VOID",
+                              {"sexp_make_fixnum(SEXP_CPOINTER)"});
+
+    for (const FieldDecl *field : decl->fields()) {
+      if (!field || field->getName().empty())
+        continue;
+      QualType fieldType = canonicalType(field->getType());
+      if (!isSupportedFieldType(fieldType))
+        continue;
+      std::string fieldName = toSymbol(field->getNameAsString());
+      std::string readerName = syntheticSchemeName(recordName, fieldName);
+      std::string readerStubName = encodeSyntheticName(readerName);
+      std::string fieldExpr = "ptr->" + field->getNameAsString();
+
+      llvm::outs() << "static sexp\nsexp_" << readerStubName
+                   << "_stub(sexp ctx, sexp self, sexp_sint_t n, sexp arg0)\n{\n";
+      llvm::outs() << "  if (!sexp_cpointerp(arg0) && !sexp_not(arg0))\n";
+      llvm::outs() << "    return sexp_type_exception(ctx, self, SEXP_CPOINTER, arg0);\n";
+      llvm::outs() << "  " << recordType << " *ptr = (" << recordType
+                   << " *)sexp_cpointer_maybe_null_value(arg0);\n";
+      llvm::outs() << "  return " << toSexpExpr(fieldType, "ptr ? " + fieldExpr + " : (" + cType(fieldType) + ")0")
+                   << ";\n";
+      llvm::outs() << "}\n\n";
+      appendForeignRegistration(readerName, readerStubName, schemeTypeIdExpr(fieldType),
+                                {"sexp_make_fixnum(SEXP_CPOINTER)"});
+
+      if (field->getType().isConstQualified())
+        continue;
+
+      std::string writerName = readerName + "!";
+      std::string writerStubName = readerStubName + "_set";
+      llvm::outs() << "static sexp\nsexp_" << writerStubName
+                   << "_stub(sexp ctx, sexp self, sexp_sint_t n, sexp arg0, sexp arg1)\n{\n";
+      llvm::outs() << "  if (!sexp_cpointerp(arg0) && !sexp_not(arg0))\n";
+      llvm::outs() << "    return sexp_type_exception(ctx, self, SEXP_CPOINTER, arg0);\n";
+      if (isIntegerLike(fieldType)) {
+        llvm::outs() << "  if (!sexp_exact_integerp(arg1))\n";
+        llvm::outs() << "    return sexp_type_exception(ctx, self, SEXP_FIXNUM, arg1);\n";
+      } else if (isCString(fieldType)) {
+        llvm::outs() << "  if (!sexp_stringp(arg1) && !sexp_not(arg1))\n";
+        llvm::outs() << "    return sexp_type_exception(ctx, self, SEXP_STRING, arg1);\n";
+      } else if (isSupportedPointer(fieldType)) {
+        llvm::outs() << "  if (!sexp_cpointerp(arg1) && !sexp_not(arg1))\n";
+        llvm::outs() << "    return sexp_type_exception(ctx, self, SEXP_CPOINTER, arg1);\n";
+      }
+      llvm::outs() << "  " << recordType << " *ptr = (" << recordType
+                   << " *)sexp_cpointer_maybe_null_value(arg0);\n";
+      llvm::outs() << "  if (ptr)\n";
+      llvm::outs() << "    ptr->" << field->getNameAsString() << " = "
+                   << fromSexpExpr(fieldType, "arg1") << ";\n";
+      llvm::outs() << "  return SEXP_VOID;\n";
+      llvm::outs() << "}\n\n";
+      appendForeignRegistration(writerName, writerStubName, "SEXP_VOID",
+                                {"sexp_make_fixnum(SEXP_CPOINTER)",
+                                 schemeTypeIdExpr(fieldType)});
+    }
+  }
+
+  void emitEnumConstants(const EnumDecl *decl) {
+    if (!decl->isCompleteDefinition() || decl->getName().empty())
+      return;
+    std::string enumKey = "enum:" + toSymbol(decl->getQualifiedNameAsString());
+    if (emitted.find(enumKey) != emitted.end())
+      return;
+    emitted.insert(enumKey);
+
+    for (const EnumConstantDecl *item : decl->enumerators()) {
+      if (!item || item->getName().empty())
+        continue;
+      std::string name = item->getNameAsString();
+      constantDefinitions.push_back(
+          "  sexp_env_define(ctx, env, sexp_intern(ctx, \"" + name +
+          "\", -1), sexp_make_integer(ctx, (sexp_sint_t)" + name + "));\n");
     }
   }
 
@@ -632,30 +815,46 @@ private:
 
   void appendForeignRegistration(const std::string &name, QualType returnType,
                                  const FunctionProtoType *ft) {
+    std::vector<std::string> argTypeExprs;
+    for (unsigned i = 0; i < ft->getNumParams(); ++i)
+      argTypeExprs.push_back(schemeTypeIdExpr(ft->getParamType(i)));
+    appendForeignRegistration(name, schemeTypeIdExpr(returnType), argTypeExprs);
+  }
+
+  void appendForeignRegistration(const std::string &name,
+                                 const std::string &stubName,
+                                 const std::string &returnTypeExpr,
+                                 const std::vector<std::string> &argTypeExprs) {
     std::string s = "  op = sexp_define_foreign(ctx, env, \"" + name + "\", " +
-                    std::to_string(ft->getNumParams()) + ", sexp_" + name +
+                    std::to_string(argTypeExprs.size()) + ", sexp_" + stubName +
                     "_stub);\n";
     s += "  if (sexp_opcodep(op)) {\n";
-    s += "    sexp_opcode_return_type(op) = " + schemeTypeIdExpr(returnType) + ";\n";
-    if (ft->getNumParams() >= 1)
-      s += "    sexp_opcode_arg1_type(op) = " + schemeTypeIdExpr(ft->getParamType(0)) + ";\n";
-    if (ft->getNumParams() >= 2)
-      s += "    sexp_opcode_arg2_type(op) = " + schemeTypeIdExpr(ft->getParamType(1)) + ";\n";
-    if (ft->getNumParams() >= 3)
-      s += "    sexp_opcode_arg3_type(op) = " + schemeTypeIdExpr(ft->getParamType(2)) + ";\n";
-    if (ft->getNumParams() > 3) {
+    s += "    sexp_opcode_return_type(op) = " + returnTypeExpr + ";\n";
+    if (argTypeExprs.size() >= 1)
+      s += "    sexp_opcode_arg1_type(op) = " + argTypeExprs[0] + ";\n";
+    if (argTypeExprs.size() >= 2)
+      s += "    sexp_opcode_arg2_type(op) = " + argTypeExprs[1] + ";\n";
+    if (argTypeExprs.size() >= 3)
+      s += "    sexp_opcode_arg3_type(op) = " + argTypeExprs[2] + ";\n";
+    if (argTypeExprs.size() > 3) {
       s += "    sexp_opcode_argn_type(op) = sexp_make_vector(ctx, "
            "sexp_make_fixnum(" +
-           std::to_string(ft->getNumParams() - 3) +
+           std::to_string(argTypeExprs.size() - 3) +
            "), sexp_make_fixnum(SEXP_OBJECT));\n";
-      for (unsigned i = 3; i < ft->getNumParams(); ++i) {
+      for (unsigned i = 3; i < argTypeExprs.size(); ++i) {
         s += "    sexp_vector_set(sexp_opcode_argn_type(op), sexp_make_fixnum(" +
-             std::to_string(i - 3) + "), " + schemeTypeIdExpr(ft->getParamType(i)) +
+             std::to_string(i - 3) + "), " + argTypeExprs[i] +
              ");\n";
       }
     }
     s += "  }\n";
     foreignRegistrations.push_back(s);
+  }
+
+  void appendForeignRegistration(const std::string &name,
+                                 const std::string &returnTypeExpr,
+                                 const std::vector<std::string> &argTypeExprs) {
+    appendForeignRegistration(name, name, returnTypeExpr, argTypeExprs);
   }
 };
 
